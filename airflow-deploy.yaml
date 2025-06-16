@@ -1,0 +1,10 @@
+---
+- name: Deploy Airflow
+  hosts: "{{ target_hosts | default('none') }}"
+  serial: "{{ deploy_serial | default(1) }}"
+  become: yes
+  tasks:
+    - name: Deploy
+      ansible.builtin.include_role:
+        name: airflow_smart
+        tasks_from: deploy

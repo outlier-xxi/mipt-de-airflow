@@ -1,0 +1,71 @@
+---
+- name: Create project directory
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    mode: '0755'
+    owner: "{{ airflow_home_user }}"
+    group: "{{ airflow_home_group }}"
+  with_items:
+      - path: "{{ airflow_home }}"
+      - path: "{{ airflow_home }}/logs"
+      - path: "{{ airflow_home }}/deploy"
+      - path: "{{ airflow_home }}/config"
+  become: true
+  tags: always
+
+- name: Create .env file
+  ansible.builtin.template:
+    src: templates/airflow.env.j2
+    dest: "{{ airflow_home }}/deploy/.env"
+    mode: '0644'
+  tags: always
+
+- name: Deliver docker compose
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ airflow_home }}/{{ item.dest }}"
+    remote_src: false
+    owner: "{{ airflow_os_user | default('dataware') }}"
+    group: "{{ airflow_os_group | default('dataware') }}"
+    mode: u+rw,g+rw,o=rx
+  with_items:
+    - src: "docker-compose.yaml"
+      dest: "deploy/docker-compose.yaml"
+  register: deliver_docker_compose_result
+  tags: always
+
+- name: Deploy with Docker Compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ airflow_home }}/deploy"
+    files:
+      - docker-compose.yaml
+    state: present
+    pull: missing
+    recreate: always
+  register: deploy_docker_compose_result
+  when: deliver_docker_compose_result is defined and deliver_docker_compose_result.changed | bool
+  tags: always
+
+- name: Wait for Airflow webserver to be ready
+  ansible.builtin.uri:
+    url: http://localhost:8080/health
+    status_code: 200
+  register: result
+  until: result.status == 200
+  retries: 30
+  delay: 2
+  ignore_errors: true
+  when: deploy_docker_compose_result is defined and deploy_docker_compose_result.changed | bool
+  tags: always
+
+- name: Check if Airflow is running
+  ansible.builtin.shell: docker ps | grep airflow-webserver
+  register: airflow_status
+  ignore_errors: true
+  tags: always
+
+- name: Show Airflow status
+  ansible.builtin.debug:
+    msg: "Airflow is {{ 'running' if airflow_status.rc == 0 else 'not running' }}"
+  tags: always
