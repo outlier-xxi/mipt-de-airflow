@@ -119,3 +119,8 @@ venv.bak/
 # Drawio tmp files
 **/*.drawio.bkp
 **/*.drawio.dtmp
+
+# Ansible
+inventory
+deploy/inventory
+src/inventory
