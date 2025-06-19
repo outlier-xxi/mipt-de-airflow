@@ -30,7 +30,7 @@ x-airflow-common:
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
     # WARNING: Use _PIP_ADDITIONAL_REQUIREMENTS option ONLY for a quick checks
     # for other purpose (development, test and especially production usage) build/extend Airflow image.
-    # _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
+    _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
     # The following line can be used to set a custom config file, stored in the local config folder
     # The path is inside a container
     AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
@@ -48,6 +48,18 @@ x-airflow-common:
       condition: service_healthy
     postgres:
       condition: service_healthy
+
+x-airflow-common-docker:   # Be careful, keys can overwrite
+  &airflow-common-docker
+  <<: *airflow-common
+  group_add:
+    - 999     # We need docker GID inside a container to match docker socket group permissions
+  volumes:    # Volumes will be overwritten with this content
+    - ${AIRFLOW_HOME:-.}/dags:/opt/airflow/dags
+    - ${AIRFLOW_HOME:-.}/logs:/opt/airflow/logs
+    - ${AIRFLOW_HOME:-.}/config:/opt/airflow/config
+    - ${AIRFLOW_HOME:-.}/plugins:/opt/airflow/plugins
+    - /var/run/docker.sock:/var/run/docker.sock
 
 services:
   postgres:
@@ -99,7 +111,7 @@ services:
         condition: service_completed_successfully
 
   airflow-scheduler:
-    <<: *airflow-common
+    <<: *airflow-common-docker
     command: scheduler
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
@@ -129,7 +141,7 @@ services:
         condition: service_completed_successfully
 
   airflow-worker:
-    <<: *airflow-common
+    <<: *airflow-common-docker
     command: celery worker
     healthcheck:
       # yamllint disable rule:line-length
@@ -154,7 +166,7 @@ services:
         condition: service_completed_successfully
 
   airflow-triggerer:
-    <<: *airflow-common
+    <<: *airflow-common-docker
     command: triggerer
     healthcheck:
       test: ["CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"']

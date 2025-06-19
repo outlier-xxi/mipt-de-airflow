@@ -35,9 +35,17 @@
   register: deliver_docker_compose_result
   tags: always
 
+# Prints contents of parsed docker_profiles
+- name: "Docker profiles: print"
+  ansible.builtin.debug:
+    msg:
+      - "docker profiles: {{ docker_profiles | default('') }}"
+  tags: always
+
 - name: Deploy with Docker Compose
   community.docker.docker_compose_v2:
     project_src: "{{ airflow_home }}/deploy"
+    profiles: "{{ docker_profiles | default('') }}"
     files:
       - docker-compose.yaml
     state: present
